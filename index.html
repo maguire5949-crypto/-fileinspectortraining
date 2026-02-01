@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>檔案特訓班：格式守門員</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -33,6 +33,10 @@
             background-image: radial-gradient(#374151 1px, transparent 1px);
             background-size: 20px 20px;
         }
+        /* Mobile safe area fix */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
     </style>
 </head>
 <body>
@@ -47,16 +51,12 @@
         const INVALID_EXTS = ['doc', 'docx', 'ppt', 'pptx', 'exe', 'zip', 'rar', 'mov', 'txt'];
         
         const generateFile = () => {
-            // 1. Decide Category (Document or Media) - affects size limit
             const isMedia = Math.random() > 0.5; 
             const categoryName = isMedia ? 'media' : 'document';
             const categoryLabel = isMedia ? '影音' : '文件';
             const limit = isMedia ? 10 : 4;
 
-            // 2. Decide Type Validity (70% valid, 30% invalid)
             const isTypeValid = Math.random() > 0.3;
-
-            // 3. Decide Size Validity (60% valid, 40% invalid)
             const isSizeValid = Math.random() > 0.4;
 
             let ext;
@@ -69,27 +69,21 @@
 
             let size;
             if (isSizeValid) {
-                // Generate size between 0.1 and limit
                 size = (Math.random() * (limit - 0.5) + 0.1).toFixed(1);
             } else {
-                // Generate size between limit + 0.1 and limit + 10
                 size = (limit + Math.random() * 8 + 0.1).toFixed(1);
             }
 
-            // Construct Reasons (More instructive text)
             const errors = [];
             if (!isTypeValid) {
-                // e.g. "影音不可上傳 .doc"
                 errors.push(`${categoryLabel}不可上傳 .${ext}`);
             }
             if (!isSizeValid) {
-                 // Updated: Specific messages for size limit
                 errors.push(`${categoryLabel}超過${limit}MB上限`);
             }
 
             let reason = null;
             if (errors.length > 0) {
-                // Modified: Join with newline before "且"
                 reason = errors.join("\n且 ");
             }
 
@@ -102,6 +96,32 @@
                 isValid: isTypeValid && isSizeValid,
                 reason: reason
             };
+        };
+
+        // --- Sound Effects (Web Audio API) ---
+        const playSound = (type) => {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                if (type === 'correct') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.2);
+                }
+            } catch (e) {
+                console.error("Audio play failed", e);
+            }
         };
 
         // --- Icons ---
@@ -139,6 +159,12 @@
             }, [gameState, feedback, currentFile]);
 
             const startGame = () => {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    const ctx = new AudioContext();
+                    ctx.resume();
+                }
+
                 setGameState('PLAYING');
                 setScore(0);
                 setTimeLeft(60);
@@ -156,16 +182,15 @@
                     setScore(prev => prev + points);
                     setStreak(prev => prev + 1);
                     setFeedback({ type: 'correct', msg: 'Good!' });
+                    // playSound('correct'); 
                 } else {
                     setStreak(0);
                     setTimeLeft(prev => Math.max(0, prev - 5));
                     
                     let msg = "";
                     if (accept && !currentFile.isValid) {
-                        // User accepted but file is invalid
                         msg = `❌ ${currentFile.reason}`;
                     } else if (!accept && currentFile.isValid) {
-                         // User rejected but file is valid
                         msg = "❌ 這是合格的檔案！\n(格式與大小皆正確)";
                     }
 
@@ -175,61 +200,62 @@
                 setTimeout(() => {
                     setFeedback(null);
                     setCurrentFile(generateFile());
-                }, isCorrect ? 400 : 2500); // Increased delay for reading error
+                }, isCorrect ? 400 : 2500);
             };
 
             return (
-                <div className="min-h-screen bg-gray-900 bg-grid-pattern flex flex-col items-center justify-center p-4 relative overflow-hidden">
+                // Use min-h-[100dvh] for mobile browsers address bar handling
+                <div className="min-h-[100dvh] h-[100dvh] bg-gray-900 bg-grid-pattern flex flex-col items-center justify-center p-4 relative overflow-hidden pb-safe">
                     
                     {/* Background Header */}
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 z-50"></div>
                     
                     {/* MENU SCREEN */}
                     {gameState === 'MENU' && (
-                        <div className="max-w-md w-full bg-white text-gray-900 rounded-2xl p-8 text-center shadow-2xl z-10 animate-pop border-4 border-gray-200">
-                            <h1 className="text-3xl md:text-4xl text-blue-600 font-black mb-8 tracking-tight">
+                        <div className="max-w-md w-full bg-white text-gray-900 rounded-2xl p-6 md:p-8 text-center shadow-2xl z-10 animate-pop border-4 border-gray-200 flex flex-col max-h-full overflow-y-auto">
+                            <h1 className="text-2xl md:text-4xl text-blue-600 font-black mb-4 md:mb-8 tracking-tight">
                                 檔案特訓班
                             </h1>
                             
-                            <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left space-y-6 border border-gray-200 shadow-inner">
-                                <h3 className="text-gray-800 font-black text-xl flex items-center border-b pb-3 border-gray-300 mb-4">
-                                    <span className="text-2xl mr-2">⚡</span> 審核規則
+                            <div className="bg-gray-50 rounded-xl p-4 md:p-6 mb-4 md:mb-8 text-left space-y-4 md:space-y-6 border border-gray-200 shadow-inner">
+                                <h3 className="text-gray-800 font-black text-lg md:text-xl flex items-center border-b pb-3 border-gray-300 mb-2 md:mb-4">
+                                    <span className="text-xl md:text-2xl mr-2">⚡</span> 審核規則
                                 </h3>
                                 
-                                <div className="space-y-6">
+                                <div className="space-y-4 md:space-y-6">
                                     {/* Documents Section */}
-                                    <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+                                    <div className="bg-white p-3 md:p-4 rounded-xl border border-blue-100 shadow-sm">
                                         <div className="flex justify-between items-center mb-2">
-                                            <div className="flex items-center text-gray-800 font-bold text-lg">
+                                            <div className="flex items-center text-gray-800 font-bold text-base md:text-lg">
                                                 <div className="bg-blue-100 p-2 rounded-lg mr-2 text-blue-600"><IconFile size={20}/></div>
                                                 文件/圖片
                                             </div>
-                                            <span className="text-blue-600 font-black text-2xl">4 MB</span>
+                                            <span className="text-blue-600 font-black text-xl md:text-2xl">4 MB</span>
                                         </div>
                                         <div className="pl-2">
                                             <p className="text-xs text-gray-400 font-bold mb-1 uppercase tracking-wider">可上傳格式：</p>
                                             <div className="flex flex-wrap gap-2">
-                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-lg">.pdf</span>
-                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-lg">.jpg</span>
-                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-lg">.png</span>
+                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-sm md:text-lg">.pdf</span>
+                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-sm md:text-lg">.jpg</span>
+                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-sm md:text-lg">.png</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Media Section */}
-                                    <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm">
+                                    <div className="bg-white p-3 md:p-4 rounded-xl border border-purple-100 shadow-sm">
                                         <div className="flex justify-between items-center mb-2">
-                                            <div className="flex items-center text-gray-800 font-bold text-lg">
+                                            <div className="flex items-center text-gray-800 font-bold text-base md:text-lg">
                                                 <div className="bg-purple-100 p-2 rounded-lg mr-2 text-purple-600"><IconVideo size={20}/></div>
                                                 影音檔案
                                             </div>
-                                            <span className="text-purple-600 font-black text-2xl">10 MB</span>
+                                            <span className="text-purple-600 font-black text-xl md:text-2xl">10 MB</span>
                                         </div>
                                         <div className="pl-2">
                                             <p className="text-xs text-gray-400 font-bold mb-1 uppercase tracking-wider">可上傳格式：</p>
                                             <div className="flex flex-wrap gap-2">
-                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-lg">.mp3</span>
-                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-lg">.mp4</span>
+                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-sm md:text-lg">.mp3</span>
+                                                <span className="px-2 py-1 bg-gray-100 rounded text-gray-700 font-bold font-mono text-sm md:text-lg">.mp4</span>
                                             </div>
                                         </div>
                                     </div>
@@ -238,7 +264,7 @@
 
                             <button 
                                 onClick={startGame}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-xl text-2xl transition transform hover:scale-[1.02] active:scale-95 shadow-xl shadow-blue-200"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-5 rounded-xl text-xl md:text-2xl transition transform hover:scale-[1.02] active:scale-95 shadow-xl shadow-blue-200 mt-auto"
                             >
                                 開始挑戰
                             </button>
@@ -247,38 +273,38 @@
 
                     {/* PLAYING SCREEN */}
                     {gameState === 'PLAYING' && (
-                        <div className="w-full max-w-lg flex flex-col h-[90vh]">
-                            {/* Score Board */}
-                            <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-lg border border-gray-100">
+                        <div className="w-full max-w-lg flex flex-col h-full justify-between pb-2 md:pb-6">
+                            {/* Score Board - Compact on mobile */}
+                            <div className="flex justify-between items-center bg-white p-3 md:p-4 rounded-xl shadow-lg border border-gray-100 mt-2 md:mt-0 flex-shrink-0">
                                 <div className="text-center">
-                                    <p className="text-xs text-gray-400 font-bold uppercase">Score</p>
-                                    <p className="text-2xl font-black text-blue-600">{score}</p>
+                                    <p className="text-[10px] md:text-xs text-gray-400 font-bold uppercase">Score</p>
+                                    <p className="text-xl md:text-2xl font-black text-blue-600">{score}</p>
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-xs text-gray-400 font-bold uppercase">Streak</p>
+                                    <p className="text-[10px] md:text-xs text-gray-400 font-bold uppercase">Streak</p>
                                     <div className="flex items-center justify-center">
-                                        <span className="text-xl font-black text-orange-500">x{streak}</span>
+                                        <span className="text-lg md:text-xl font-black text-orange-500">x{streak}</span>
                                         {streak > 5 && <span className="ml-1 text-orange-500">🔥</span>}
                                     </div>
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-xs text-gray-400 font-bold uppercase">Time</p>
-                                    <p className={`text-2xl font-black font-mono ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
+                                    <p className="text-[10px] md:text-xs text-gray-400 font-bold uppercase">Time</p>
+                                    <p className={`text-xl md:text-2xl font-black font-mono ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
                                         {timeLeft}
                                     </p>
                                 </div>
                             </div>
 
                             {/* Main Game Area */}
-                            <div className="flex-grow relative flex items-center justify-center">
+                            <div className="flex-grow relative flex items-center justify-center py-2">
                                 
                                 {/* Background Hints */}
                                 <div className="absolute inset-0 flex justify-between items-center px-4 pointer-events-none opacity-20">
-                                    <div className="flex flex-col items-center">
+                                    <div className="flex flex-col items-center transform scale-75 md:scale-100">
                                         <div className="bg-red-500 rounded-full p-4 mb-2"><IconX size={40} className="text-white"/></div>
                                         <span className="text-red-300 font-black text-xl">刪除</span>
                                     </div>
-                                    <div className="flex flex-col items-center">
+                                    <div className="flex flex-col items-center transform scale-75 md:scale-100">
                                         <div className="bg-green-500 rounded-full p-4 mb-2"><IconCheck size={40} className="text-white"/></div>
                                         <span className="text-green-300 font-black text-xl">上傳</span>
                                     </div>
@@ -286,44 +312,44 @@
 
                                 {/* The Card */}
                                 {currentFile && !feedback && (
-                                    <div className="relative w-full bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center animate-pop z-10 border-4 border-white">
+                                    <div className="relative w-full bg-white rounded-3xl p-4 md:p-6 shadow-2xl flex flex-col items-center animate-pop z-10 border-4 border-white max-h-[50vh] md:max-h-none justify-center">
                                         
                                         {/* Top Section: Icon & Name */}
-                                        <div className="w-full flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
-                                            <div className={`p-3 rounded-2xl ${currentFile.category === 'media' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                {currentFile.category === 'media' ? <IconVideo size={32} /> : <IconFile size={32} />}
+                                        <div className="w-full flex items-center justify-between mb-4 md:mb-6 border-b border-gray-100 pb-3 md:pb-4">
+                                            <div className={`p-2 md:p-3 rounded-2xl ${currentFile.category === 'media' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                {currentFile.category === 'media' ? <IconVideo size={28} className="md:w-8 md:h-8" /> : <IconFile size={28} className="md:w-8 md:h-8" />}
                                             </div>
-                                            <h2 className="text-lg font-bold text-gray-500 truncate flex-1 text-right">{currentFile.name}</h2>
+                                            <h2 className="text-base md:text-lg font-bold text-gray-500 truncate flex-1 text-right">{currentFile.name}</h2>
                                         </div>
 
-                                        {/* Main Content: HUGE Text for readability */}
-                                        <div className="flex flex-col items-center justify-center space-y-4 mb-6 w-full py-4">
+                                        {/* Main Content */}
+                                        <div className="flex flex-col items-center justify-center space-y-4 mb-4 md:mb-6 w-full py-2 md:py-4">
                                             <div className={`
-                                                px-6 py-2 rounded-full font-black text-2xl tracking-wide uppercase shadow-sm
+                                                px-6 py-2 rounded-full font-black text-2xl md:text-3xl tracking-wide uppercase shadow-sm
                                                 ${!DOC_VALID_EXTS.includes(currentFile.ext) && !MEDIA_VALID_EXTS.includes(currentFile.ext) ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-800'}
                                             `}>
                                                 .{currentFile.ext}
                                             </div>
                                             
                                             <div className="text-center">
-                                                <div className="text-sm text-gray-400 font-bold mb-1 uppercase tracking-widest">File Size</div>
-                                                <div className={`text-6xl font-black tracking-tighter ${
+                                                <div className="text-xs md:text-sm text-gray-400 font-bold mb-1 uppercase tracking-widest">File Size</div>
+                                                <div className={`text-5xl md:text-6xl font-black tracking-tighter ${
                                                     parseFloat(currentFile.size) > 10 ? 'text-gray-900' : 'text-gray-800'
                                                 }`}>
-                                                    {currentFile.size} <span className="text-2xl text-gray-400 font-bold">MB</span>
+                                                    {currentFile.size} <span className="text-xl md:text-2xl text-gray-400 font-bold">MB</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Feedback Overlay (Replaces Card) */}
+                                {/* Feedback Overlay */}
                                 {feedback && (
                                     <div className="relative w-full flex flex-col items-center justify-center z-20 animate-pop px-4">
-                                        <div className={`rounded-full p-6 shadow-2xl mb-4 ${feedback.type === 'correct' ? 'bg-green-500' : 'bg-red-500'}`}>
-                                            {feedback.type === 'correct' ? <IconCheck size={48} className="text-white"/> : <IconX size={48} className="text-white"/>}
+                                        <div className={`rounded-full p-4 md:p-6 shadow-2xl mb-4 ${feedback.type === 'correct' ? 'bg-green-500' : 'bg-red-500'}`}>
+                                            {feedback.type === 'correct' ? <IconCheck size={40} className="text-white md:w-12 md:h-12"/> : <IconX size={40} className="text-white md:w-12 md:h-12"/>}
                                         </div>
-                                        <div className={`text-xl md:text-2xl font-black text-center text-white drop-shadow-md bg-black/80 p-6 rounded-xl leading-relaxed border-2 border-white/20 whitespace-pre-wrap`}>
+                                        <div className={`text-lg md:text-2xl font-black text-center text-white drop-shadow-md bg-black/80 p-4 md:p-6 rounded-xl leading-relaxed border-2 border-white/20 whitespace-pre-wrap`}>
                                             {feedback.msg}
                                         </div>
                                     </div>
@@ -331,20 +357,22 @@
                             </div>
 
                             {/* Control Buttons */}
-                            <div className="grid grid-cols-2 gap-6 mt-4 mb-4">
+                            <div className="grid grid-cols-2 gap-3 md:gap-6 mt-auto flex-shrink-0">
                                 <button 
                                     onClick={() => handleAction(false)}
                                     disabled={!!feedback}
-                                    className="bg-red-500 active:bg-red-600 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-red-900/30 flex items-center justify-center transition active:scale-95"
+                                    className="bg-red-500 active:bg-red-600 text-white py-4 md:py-6 rounded-2xl font-black text-base md:text-xl shadow-lg shadow-red-900/30 flex items-center justify-center transition active:scale-95 whitespace-nowrap"
                                 >
-                                    <IconX size={28} className="mr-2"/> 刪除 (Reject)
+                                    <IconX size={20} className="mr-1 md:mr-2 md:w-7 md:h-7"/> 
+                                    <span>刪除</span> <span className="hidden md:inline ml-1">(Reject)</span>
                                 </button>
                                 <button 
                                     onClick={() => handleAction(true)}
                                     disabled={!!feedback}
-                                    className="bg-green-500 active:bg-green-600 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-green-900/30 flex items-center justify-center transition active:scale-95"
+                                    className="bg-green-500 active:bg-green-600 text-white py-4 md:py-6 rounded-2xl font-black text-base md:text-xl shadow-lg shadow-green-900/30 flex items-center justify-center transition active:scale-95 whitespace-nowrap"
                                 >
-                                    <IconCheck size={28} className="mr-2"/> 上傳 (Upload)
+                                    <IconCheck size={20} className="mr-1 md:mr-2 md:w-7 md:h-7"/> 
+                                    <span>上傳</span> <span className="hidden md:inline ml-1">(Upload)</span>
                                 </button>
                             </div>
                         </div>
@@ -353,7 +381,7 @@
                     {/* GAME OVER SCREEN */}
                     {gameState === 'GAMEOVER' && (
                         <div className="max-w-md w-full bg-white rounded-2xl p-8 text-center shadow-2xl animate-pop border-4 border-gray-200">
-                            <h2 className="text-4xl font-black text-gray-900 mb-2">Time's up!</h2>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-2">Time's up!</h2>
                             <p className="text-gray-500 mb-8 font-bold">特訓結束</p>
 
                             <div className="bg-blue-50 rounded-xl p-8 mb-8 border border-blue-100">
