@@ -39,6 +39,15 @@
         .pb-safe {
             padding-bottom: env(safe-area-inset-bottom);
         }
+        /* Shake animation for wrong answers */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .animate-shake {
+            animation: shake 0.2s ease-in-out 0s 2;
+        }
     </style>
 </head>
 <body>
@@ -175,6 +184,12 @@
                 setCurrentFile(generateFile());
             };
 
+            const triggerVibration = (pattern) => {
+                if (navigator.vibrate) {
+                    navigator.vibrate(pattern);
+                }
+            };
+
             const handleAction = (accept) => {
                 if (!currentFile) return;
 
@@ -185,10 +200,18 @@
                     setStreak(prev => prev + 1);
                     setFeedback({ type: 'correct', msg: 'Good!' });
                     // playSound('correct'); 
+                    
+                    // Optional: Very light feedback for success
+                    // triggerVibration(50); 
                 } else {
+                    // Wrong answer logic
                     setStreak(0);
                     setTimeLeft(prev => Math.max(0, prev - 5));
                     
+                    // --- VIBRATION FEEDBACK ---
+                    // Vibrate for 200ms
+                    triggerVibration(200);
+
                     let msg = "";
                     if (accept && !currentFile.isValid) {
                         msg = `❌ ${currentFile.reason}`;
@@ -206,7 +229,6 @@
             };
 
             return (
-                // Changed from h-[100dvh] to min-h-screen to allow scrolling on desktop if content overflows
                 <div className="min-h-screen w-full bg-gray-900 bg-grid-pattern flex flex-col items-center justify-center p-4 relative pb-safe">
                     
                     {/* Background Header */}
@@ -345,9 +367,9 @@
                                     </div>
                                 )}
 
-                                {/* Feedback Overlay */}
+                                {/* Feedback Overlay - Added animate-shake class conditionally if you want, but vibration is key here */}
                                 {feedback && (
-                                    <div className="relative w-full flex flex-col items-center justify-center z-20 animate-pop px-4">
+                                    <div className={`relative w-full flex flex-col items-center justify-center z-20 px-4 ${feedback.type === 'wrong' ? 'animate-shake' : 'animate-pop'}`}>
                                         <div className={`rounded-full p-4 md:p-6 shadow-2xl mb-4 ${feedback.type === 'correct' ? 'bg-green-500' : 'bg-red-500'}`}>
                                             {feedback.type === 'correct' ? <IconCheck size={40} className="text-white md:w-12 md:h-12"/> : <IconX size={40} className="text-white md:w-12 md:h-12"/>}
                                         </div>
@@ -408,3 +430,25 @@
     </script>
 </body>
 </html>
+```
+
+### 修改重點：
+
+1.  **新增震動邏輯**：
+    在 `handleAction` 的錯誤判斷區塊（`else`）中加入了 `triggerVibration(200)`。
+    ```javascript
+    const triggerVibration = (pattern) => {
+        if (navigator.vibrate) {
+            navigator.vibrate(pattern);
+        }
+    };
+    
+    // ... 在答錯時呼叫
+    triggerVibration(200);
+    ```
+
+2.  **新增視覺搖晃動畫**：
+    為了加強錯誤的回饋感（特別是針對不支援震動的 iOS 設備），我同時加入了一個 CSS `shake` 動畫。
+    ```css
+    @keyframes shake { ... }
+    .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
